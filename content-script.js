@@ -4,62 +4,32 @@
   'use strict';
 
   const BTN_ID = 'goodbye-gpt-btn';
-  const DELAY_MENU = 350;
-  const DELAY_MODAL = 500;
-  const DELAY_BETWEEN = 600;
+  const DELAY_MENU = 450;
+  const DELAY_MODAL = 700;
+  const DELAY_BETWEEN = 1200;
 
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  function waitPresent(selector, root = document, timeoutMs = 2500) {
+  function waitPresent(selector, root = document, timeoutMs = 3000) {
     const t0 = performance.now();
     return new Promise((resolve) => {
       function check() {
         const el = root.querySelector(selector);
         if (el) return resolve(el);
         if (performance.now() - t0 >= timeoutMs) return resolve(null);
-        setTimeout(check, 25);
+        setTimeout(check, 30);
       }
       check();
     });
   }
 
-  const SELECTORS = {
-    conversationLinks: [
-      '#history a[draggable="true"][href^="/c/"]',
-      '#history a[href^="/c/"]',
-      'a[href^="/c/"]',
-    ],
-    optionsButton: [
-      'button[data-testid^="history-item-"][data-testid$="-options"]',
-      'button[aria-label*="options"]',
-    ],
-    deleteMenuItem: [
-      '[role="menuitem"][data-testid="delete-chat-menu-item"]',
-      'div[role="menuitem"]',
-    ],
-    modal: [
-      'div[data-testid="modal-delete-conversation-confirmation"]',
-      '[role="dialog"]',
-    ],
-    confirmButton: [
-      'button[data-testid="delete-conversation-confirm-button"]',
-      'button.btn-danger',
-      'button[class*="danger"]',
-    ],
-  };
+  const OPTIONS_SELECTORS = [
+    'button[data-testid^="history-item-"][data-testid$="-options"]',
+    'button[aria-label*="options"]',
+  ];
 
-  function findFirst(selectors) {
-    for (const sel of selectors) {
-      try {
-        const el = document.querySelector(sel);
-        if (el) return el;
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  function findAll(selectors) {
-    for (const sel of selectors) {
+  function getOptionsButtons() {
+    for (const sel of OPTIONS_SELECTORS) {
       try {
         const els = document.querySelectorAll(sel);
         if (els.length > 0) return Array.from(els);
@@ -68,45 +38,23 @@
     return [];
   }
 
-  function getConversationRows() {
-    const links = findAll(SELECTORS.conversationLinks);
-    const rows = new Set();
-
-    for (const link of links) {
-      let row = link.closest('li') || link.closest('[role="listitem"]') || link.parentElement;
-      while (row && !getOptionsButton(row)) {
-        row = row.parentElement;
-      }
-      if (row && !rows.has(row)) {
-        rows.add(row);
-      }
-    }
-
-    return Array.from(rows);
-  }
-
-  function getOptionsButton(row) {
-    for (const sel of SELECTORS.optionsButton) {
-      try {
-        const btn = row.querySelector(sel);
-        if (btn) return btn;
-      } catch (_) {}
-    }
-    return null;
+  function getIdFromButton(btn) {
+    const row = btn.closest('li') || btn.closest('[role="listitem"]') || btn.parentElement?.closest('[role="group"]') || btn.parentElement;
+    const link = row?.querySelector?.('a[href^="/c/"]');
+    const m = link?.getAttribute?.('href')?.match(/\/c\/([a-f0-9-]+)/i);
+    return m ? m[1] : null;
   }
 
   function clickDeleteMenuItem() {
-    const deleteItem = document.querySelector('[role="menuitem"][data-testid="delete-chat-menu-item"]');
-    if (deleteItem) {
-      deleteItem.click();
+    const item = document.querySelector('[role="menuitem"][data-testid="delete-chat-menu-item"]');
+    if (item) {
+      item.click();
       return true;
     }
-
-    const items = document.querySelectorAll('[role="menuitem"]');
-    for (const item of items) {
-      const t = (item.textContent || '').toLowerCase();
+    for (const el of document.querySelectorAll('[role="menuitem"]')) {
+      const t = (el.textContent || '').toLowerCase();
       if (t.includes('delete') || t.includes('supprimer')) {
-        item.click();
+        el.click();
         return true;
       }
     }
@@ -114,46 +62,30 @@
   }
 
   async function clickConfirmButton() {
-    const modal = await waitPresent(SELECTORS.modal[0], document, 2000) || findFirst(SELECTORS.modal);
+    const modal = await waitPresent('[data-testid="modal-delete-conversation-confirmation"]', document, 2500)
+      || document.querySelector('[role="dialog"]');
     if (!modal) return false;
 
-    for (const sel of SELECTORS.confirmButton) {
-      try {
-        const btn = modal.querySelector(sel);
-        if (btn) {
-          btn.click();
-          return true;
-        }
-      } catch (_) {}
-    }
-
-    const buttons = modal.querySelectorAll('button');
-    for (const btn of buttons) {
-      const t = (btn.textContent || '').toLowerCase();
-      if (t.includes('delete') || t.includes('supprimer')) {
-        btn.click();
-        return true;
-      }
+    const confirmBtn = modal.querySelector('[data-testid="delete-conversation-confirm-button"]')
+      || modal.querySelector('button.btn-danger')
+      || Array.from(modal.querySelectorAll('button')).find(b => /delete|supprimer/i.test(b.textContent || ''));
+    if (confirmBtn) {
+      confirmBtn.click();
+      return true;
     }
     return false;
   }
 
-  async function deleteOneConversation(row) {
-    const optionsBtn = getOptionsButton(row);
-    if (!optionsBtn) return false;
+  async function deleteViaButton(btn) {
+    if (!btn || !document.contains(btn)) return false;
 
-    optionsBtn.click();
+    btn.click();
     await wait(DELAY_MENU);
 
-    const deleteClicked = clickDeleteMenuItem();
-    if (!deleteClicked) return false;
-
+    if (!clickDeleteMenuItem()) return false;
     await wait(DELAY_MODAL);
 
-    const confirmClicked = await clickConfirmButton();
-    if (!confirmClicked) return false;
-
-    return true;
+    return await clickConfirmButton();
   }
 
   async function deleteAllConversations() {
@@ -163,30 +95,49 @@
     btn.disabled = true;
     btn.textContent = 'Suppression en cours...';
 
-    let total = 0;
+    const skipIds = new Set();
     let ok = 0;
     let fail = 0;
+    let consecutiveFails = 0;
 
     try {
       while (true) {
-        const rows = getConversationRows();
-        if (rows.length === 0) break;
+        let buttons = getOptionsButtons();
+        let toProcess = buttons.filter(b => {
+          const id = getIdFromButton(b);
+          return id && !skipIds.has(id);
+        });
 
-        total += rows.length;
-
-        for (const row of rows) {
-          try {
-            const success = await deleteOneConversation(row);
-            if (success) ok++;
-            else fail++;
-          } catch (err) {
-            fail++;
-            console.warn('[Goodbye GPT] Erreur:', err);
-          }
-          await wait(DELAY_BETWEEN);
+        if (toProcess.length === 0) {
+          await wait(1500);
+          toProcess = getOptionsButtons().filter(b => !skipIds.has(getIdFromButton(b)));
+          if (toProcess.length === 0) break;
         }
 
-        await wait(400);
+        const target = toProcess[0];
+        if (!target) break;
+
+        const id = getIdFromButton(target);
+
+        try {
+          const success = await deleteViaButton(target);
+          if (success) {
+            ok++;
+            consecutiveFails = 0;
+          } else {
+            if (id) skipIds.add(id);
+            fail++;
+            consecutiveFails++;
+          }
+        } catch (err) {
+          if (id) skipIds.add(id);
+          fail++;
+          consecutiveFails++;
+          console.warn('[Goodbye GPT]', err);
+        }
+
+        if (consecutiveFails >= 8) break;
+        await wait(DELAY_BETWEEN);
       }
 
       btn.textContent = `Terminé (${ok} supprimées${fail > 0 ? `, ${fail} échecs` : ''})`;
@@ -252,9 +203,7 @@
       requestAnimationFrame(boot);
       return;
     }
-
     ensureButton();
-
     const observer = new MutationObserver(() => ensureButton());
     observer.observe(document.documentElement, { childList: true, subtree: true });
     setInterval(ensureButton, 2000);
