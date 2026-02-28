@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Goodbye GPT",
+  "version": "1.0.0",
+  "description": "Automatically delete all ChatGPT conversations.",
+  "permissions": ["activeTab"],
+  "host_permissions": ["https://chatgpt.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://chatgpt.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
