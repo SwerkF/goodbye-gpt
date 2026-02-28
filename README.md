@@ -31,6 +31,7 @@ This extension lets you **bulk-delete all your ChatGPT conversations** from the 
 3. If the three-dot options button (⋯) are missing for all conversation, right-click on it and choose **Inspect Element** to reveal it. Keep it open.
 
 ![Emplacement du bouton options](image.png)
+
 4. A red **"Supprimer tous les chats"** button appears in the center of the page.
 5. Click it to start bulk deletion of all visible conversations.
 6. The extension runs: open menu → Delete → Confirm, for each conversation.
@@ -87,6 +88,7 @@ Cette extension permet de **supprimer en masse toutes vos conversations ChatGPT*
 Laissez le ouvert.
 
 ![Emplacement du bouton options](image.png)
+
 4. Un bouton rouge **« Supprimer tous les chats »** apparaît au centre de la page.
 5. Cliquez dessus pour lancer la suppression en masse de toutes les conversations visibles.
 6. L'extension enchaîne : ouvrir le menu → Supprimer → Confirmer, pour chaque conversation.
